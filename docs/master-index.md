@@ -158,6 +158,92 @@ const worldPos = CameraController.screenToWorld(event.clientX, event.clientY);
 ### Core Systems (Phase 1)
 *Foundational modules that all features depend on.*
 
+#### `LevelLoader` (NEW)
+**Location:** `src/core/LevelLoader.ts`  
+**Purpose:** Loads and validates level JSON schemas with asset binding verification.
+```typescript
+class LevelLoader {
+  // Loading
+  static async load(levelPath: string): Promise<LevelData>
+  static getCurrentLevel(): LevelData | null
+  
+  // Validation
+  static validate(data: unknown): ValidationResult
+  
+  // Queries
+  static getZonesByType(type: ZoneType): SpawnZone[]
+  static getVignetteById(id: string): VignetteRule | undefined
+}
+
+interface LevelData {
+  meta: {
+    id: string;         // e.g., "level_01_docks"
+    name: string;       // Display name
+    version: string;    // Schema version (e.g., "1.0")
+  };
+  world: {
+    width: number;              // Total world width in pixels
+    height: number;             // Total world height in pixels
+    background_asset_id: string; // Must exist in AssetRegistry
+  };
+  population: {
+    civilian_count: number;     // Must be <= 60 (system.md constraint)
+    killer_count: number;       // Usually 1
+    density_map?: string;       // Optional: asset_id for density texture
+  };
+  zones: SpawnZone[];
+  vignettes: VignetteRule[];
+}
+
+type ZoneType = 'walkable' | 'obstacle' | 'vignette_hotspot' | 'exit';
+
+interface SpawnZone {
+  x: number;              // World coordinate X (pixels)
+  y: number;              // World coordinate Y (pixels)
+  w: number;              // Width
+  h: number;              // Height
+  type: ZoneType;
+  capacity_weight: number; // 0.0 to 1.0 (spawn probability)
+}
+
+interface VignetteRule {
+  id: string;             // e.g., "crime_scene_alley"
+  required_zone: string;  // Matches ZoneType
+  probability: number;    // 0.0 to 1.0
+}
+
+interface ValidationResult {
+  valid: boolean;
+  errors: Array<{
+    code: 'BOUNDS_OVERFLOW' | 'MISSING_ASSET' | 'POPULATION_EXCEEDED' | 'INVALID_WEIGHT';
+    message: string;
+    path: string;          // JSON path (e.g., "zones[0].x")
+  }>;
+}
+```
+
+**Guarantees:**
+- All asset references validated against `AssetRegistry` before returning `LevelData`
+- Zone bounds checked against world dimensions
+- `civilian_count` enforced <= 60 (system.md constraint)
+- `capacity_weight` clamped to [0.0, 1.0] range
+- Invalid JSON throws synchronous errors (fail-fast)
+
+**Dependencies:** 
+- `AssetRegistry.has()` for asset validation
+- `CameraController.setBounds()` for world initialization
+
+**Usage Example:**
+```typescript
+// Load and validate level
+const level = await LevelLoader.load('/levels/test_level.json');
+
+// Initialize world
+CameraController.setBounds(level.world.width, level.world.height);
+
+// Query spawn zones
+const walkableZones = LevelLoader.getZonesByType('walkable');
+```
 
 #### `AssetRegistry` (NEW)
 **Location:** `src/core/AssetRegistry.ts`  

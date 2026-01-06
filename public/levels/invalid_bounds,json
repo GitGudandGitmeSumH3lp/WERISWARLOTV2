@@ -1,0 +1,8 @@
+{
+    "meta": { "id": "bad_bounds", "name": "Bad Bounds Test", "version": "1.0" },
+    "world": { "width": 100, "height": 100, "background_asset_id": "bg_subway_tile_01" },
+    "population": { "civilian_count": 10, "killer_count": 1 },
+    "zones": [
+        { "x": 90, "y": 90, "w": 20, "h": 20, "type": "walkable", "capacity_weight": 0.5 }
+    ]
+}

@@ -1,0 +1,57 @@
+{
+    "meta": {
+        "id": "lvl_test_01",
+        "name": "Test Level",
+        "version": "1.0"
+    },
+    "world": {
+        "width": 2048,
+        "height": 1024,
+        "background_asset_id": "ground"  
+    },
+    "population": {
+        "civilian_count": 45,
+        "killer_count": 1
+    },
+    "zones": [
+        {
+            "x": 100,
+            "y": 200,
+            "w": 300,
+            "h": 150,
+            "type": "walkable",
+            "capacity_weight": 0.8
+        },
+        {
+            "x": 500,
+            "y": 400,
+            "w": 200,
+            "h": 200,
+            "type": "walkable",
+            "capacity_weight": 0.5
+        },
+        {
+            "x": 800,
+            "y": 100,
+            "w": 150,
+            "h": 150,
+            "type": "obstacle",
+            "capacity_weight": 0.0
+        },
+        {
+            "x": 1800,
+            "y": 800,
+            "w": 200,
+            "h": 200,
+            "type": "vignette_hotspot",
+            "capacity_weight": 0.3
+        }
+    ],
+    "vignettes": [
+        {
+            "id": "crime_scene_alley",
+            "required_zone": "vignette_hotspot",
+            "probability": 0.7
+        }
+    ]
+}

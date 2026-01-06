@@ -38,7 +38,7 @@ export function CameraTest({ config }: CameraTestProps) {
 
       try {
         // Clean up any previous instance
-        if (CameraController.isInitialized()) {
+        if (CameraController.isInitialized) {
           CameraController.destroy();
         }
 
@@ -147,7 +147,7 @@ export function CameraTest({ config }: CameraTestProps) {
     // Cleanup on unmount
     return () => {
       mounted = false;
-      if (CameraController.isInitialized()) {
+      if (CameraController.isInitialized) {
         CameraController.destroy();
       }
     };
@@ -220,7 +220,7 @@ export function CameraTest({ config }: CameraTestProps) {
               <div>Viewport: <code>1280×720</code></div>
               <div>Level Bounds: <code>{finalConfig.bounds.width}×{finalConfig.bounds.height}</code></div>
               <div>Zoom: <code>{CameraController.getZoom().toFixed(1)}x</code></div>
-              <div>Y-Sorting: <code>{CameraController.isInitialized() ? 'ENABLED' : '—'}</code></div>
+              <div>Y-Sorting: <code>{CameraController.isInitialized ? 'ENABLED' : '—'}</code></div>
             </div>
           </div>
           

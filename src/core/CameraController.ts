@@ -33,12 +33,15 @@ export class CameraController {
    * Get the PixiJS application instance
    * @throws Error if CameraController not initialized
    */
-  static get app(): PIXI.Application {
+static get app(): PIXI.Application {
     if (!this._initialized || !this._app) {
-      throw new Error('CameraController not initialized');
+        // Instead of throwing, return a placeholder or handle gracefully
+        console.warn('CameraController not initialized. Call initialize() first.');
+        // You could return a dummy app or handle this differently
+        throw new Error('CameraController not initialized');
     }
     return this._app;
-  }
+}
 
   /**
    * Get the world container for adding game objects
@@ -211,9 +214,11 @@ export class CameraController {
   /**
    * Check if camera system is initialized
    */
-static isInitialized(): boolean {
-  return this._initialized;
-}
+    // Add this getter
+    static get isInitialized(): boolean {
+        return this._initialized && this._app !== null;
+    }
+
   /**
    * Get current zoom level
    */
@@ -319,7 +324,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
       console.log('  New bounds:', CameraController.getBounds());
       
       // Test initialization state
-      console.log('✅ isInitialized():', CameraController.isInitialized());
+      console.log('✅ isInitialized():', CameraController.isInitialized);
       console.log('✅ getZoom():', CameraController.getZoom());
       
       alert('🧪 CameraController smoke test passed! Check console for details.');

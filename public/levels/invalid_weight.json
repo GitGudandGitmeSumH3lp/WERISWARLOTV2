@@ -1,0 +1,8 @@
+{
+    "meta": { "id": "bad_weight", "name": "Invalid Weight Test", "version": "1.0" },
+    "world": { "width": 100, "height": 100, "background_asset_id": "ground" },  
+    "population": { "civilian_count": 10, "killer_count": 1 },
+    "zones": [
+        { "x": 0, "y": 0, "w": 10, "h": 10, "type": "walkable", "capacity_weight": 1.5 }
+    ]
+}

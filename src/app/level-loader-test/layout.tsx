@@ -1,11 +1,12 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 
+
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Project Crowd Killer',
-  description: "Where's Waldo: Serial Killer Edition",
+  description: 'Where\'s Waldo: Serial Killer Edition',
 };
 
 export default function RootLayout({
@@ -14,11 +15,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={inter.className} suppressHydrationWarning>
-        <div style={{ margin: 0, padding: 0 }}>
-          {children}
-        </div>
+    <html lang="en">
+      <body className={inter.className} style={{ margin: 0 }}>
+        {children}
       </body>
     </html>
   );

@@ -1,64 +1,42 @@
 ## Error Type
-Runtime TypeError
+Console ValidationError
 
 ## Error Message
-__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$core$2f$CameraController$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__.CameraController.destroy is not a function
+Level validation failed
 
 
-    at CameraTest.useEffect (src/components/CameraTest.tsx:151:26)
-    at CameraTest (<anonymous>:null:null)
+    at LevelLoader.load (src/core/LevelLoader.ts:44:23)
+    at async testConsoleAPI (src/app/level-loader-test/page.tsx:121:27)
 
 ## Code Frame
-  149 |       mounted = false;
-  150 |       if (CameraController.isInitialized()) {
-> 151 |         CameraController.destroy();
-      |                          ^
-  152 |       }
-  153 |     };
-  154 |   }, [finalConfig]);
+  42 |             const assetResult = await this._validateAssets(typedData);
+  43 |             if (!assetResult.valid) {
+> 44 |                 throw new ValidationError(assetResult.errors);
+     |                       ^
+  45 |             }
+  46 |             
+  47 |             const constraintResult = this._validateConstraints(typedData);
 
 Next.js version: 16.1.1 (Turbopack)
 
 ## Error Type
-Runtime TypeError
+Console NetworkError
 
 ## Error Message
-__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$core$2f$CameraController$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__.CameraController.destroy is not a function
+Failed to load level: /levels/invalid_bounds.json (404)
 
 
-    at CameraTest.useEffect (src/components/CameraTest.tsx:151:26)
-    at CameraTestPage (src/app/test-camera/page.tsx:31:13)
-
-## Code Frame
-  149 |       mounted = false;
-  150 |       if (CameraController.isInitialized()) {
-> 151 |         CameraController.destroy();
-      |                          ^
-  152 |       }
-  153 |     };
-  154 |   }, [finalConfig]);
-
-Next.js version: 16.1.1 (Turbopack)
-
-## Error Type
-Console TypeError
-
-## Error Message
-__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$core$2f$CameraController$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__.CameraController.destroy is not a function
-
-
-    at init (src/components/CameraTest.tsx:42:28)
-    at CameraTest.useEffect (src/components/CameraTest.tsx:145:5)
-    at CameraTestPage (src/app/test-camera/page.tsx:31:13)
+    at LevelLoader.load (src/core/LevelLoader.ts:17:23)
+    at async runEdgeCaseTests (src/app/level-loader-test/page.tsx:101:17)
 
 ## Code Frame
-  40 |         // Clean up any previous instance
-  41 |         if (CameraController.isInitialized()) {
-> 42 |           CameraController.destroy();
-     |                            ^
-  43 |         }
-  44 |
-  45 |         // Initialize camera
+  15 |             const response = await fetch(levelPath);
+  16 |             if (!response.ok) {
+> 17 |                 throw new NetworkError(`Failed to load level: ${levelPath} (${response.status})`);
+     |                       ^
+  18 |             }
+  19 |             
+  20 |             // Parse JSON
 
 Next.js version: 16.1.1 (Turbopack)
 
@@ -66,7 +44,53 @@ Next.js version: 16.1.1 (Turbopack)
 Console Error
 
 ## Error Message
-[Loader.load] Failed to load http://localhost:3001/test_spritesheet.png.
-Error: [WorkerManager.loadImageBitmap] Failed to fetch http://localhost:3001/test_spritesheet.png: 404 Not Found
+A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <HotReload globalError={[...]} webSocket={WebSocket} staticIndicatorState={{pathname:null, ...}}>
+      <AppDevOverlayErrorBoundary globalError={[...]}>
+        <ReplaySsrOnlyErrors>
+        <DevRootHTTPAccessFallbackBoundary>
+          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>
+            <HTTPAccessFallbackErrorBoundary pathname="/level-loa..." notFound={<NotAllowedRootHTTPFallbackError>} ...>
+              <RedirectBoundary>
+                <RedirectErrorBoundary router={{...}}>
+                  <Head>
+                  <__next_root_layout_boundary__>
+                    <SegmentViewNode type="layout" pagePath="layout.tsx">
+                      <SegmentTrieNode>
+                      <link>
+                      <script>
+                      <RootLayout>
+                        <html lang="en">
+                          <body
+                            className="inter_5972bc34-module__OU16Qa__className"
+-                           style={{margin-top:"0px",margin-right:"0px",margin-bottom:"0px",margin-left:"0px"}}
+                          >
+                  ...
+
+
+
+    at body (<anonymous>:null:null)
+    at RootLayout (src\app\layout.tsx:19:7)
+
+## Code Frame
+  17 |   return (
+  18 |     <html lang="en">
+> 19 |       <body className={inter.className}>
+     |       ^
+  20 |         {children}
+  21 |       </body>
+  22 |     </html>
 
 Next.js version: 16.1.1 (Turbopack)

@@ -1,0 +1,15 @@
+{
+  "spritesheet": "/assets/generated/sprites.png",
+  "frames": {
+    "ground": { "x": 0, "y": 0, "w": 64, "h": 64 },
+    "civilian": { "x": 64, "y": 0, "w": 16, "h": 32 },
+    "killer": { "x": 80, "y": 0, "w": 16, "h": 32 },
+    "bench": { "x": 96, "y": 0, "w": 32, "h": 16 }
+  },
+  "metadata": {
+    "ground": { "anchor": { "x": 0.5, "y": 0.5 }, "type": "tile" },
+    "civilian": { "anchor": { "x": 0.5, "y": 0.9 }, "type": "npc" },
+    "killer": { "anchor": { "x": 0.5, "y": 0.9 }, "type": "npc" },
+    "bench": { "anchor": { "x": 0.5, "y": 0.8 }, "type": "prop" }
+  }
+}
