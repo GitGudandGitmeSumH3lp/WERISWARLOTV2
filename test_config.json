@@ -1,0 +1,29 @@
+{
+  "assets": {
+    "ground": {
+      "type": "tile",
+      "size": [64, 64],
+      "palette": ["#3a5a40"],
+      "noise_seed": 42,
+      "anchor": [0.5, 0.5]
+    },
+    "civilian": {
+      "type": "npc",
+      "size": [16, 32],
+      "palette": ["#4a90e2"],
+      "anchor": [0.5, 0.9]
+    },
+    "killer": {
+      "type": "npc",
+      "size": [16, 32],
+      "palette": ["#e74c3c"],
+      "anchor": [0.5, 0.9]
+    },
+    "bench": {
+      "type": "prop",
+      "size": [32, 16],
+      "palette": ["#8b4513"],
+      "anchor": [0.5, 0.8]
+    }
+  }
+}

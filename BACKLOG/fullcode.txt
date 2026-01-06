@@ -1,0 +1,741 @@
+feature_art_direction.md:
+<code>
+# Feature: Art Direction & Visual Standards
+**Version:** 1.0.0 | **Phase:** 0 (Design) → 1 (Implementation) | **Priority:** LOW (But Critical for Polish)
+
+## Experience Goal
+**The Vibe:** *Stardew Meets Se7en*
+The art should be approachable (Stardew Valley's warmth) but with subtle darkness (muted colors, textured shadows). It's a game about murder, but it shouldn't be grimdark. Think "cozy mystery with teeth." The player should feel comfortable spending hours in this world, even as they hunt a killer.
+
+## User Stories
+- **As a player**, I want the art to be readable (good for glasses-wearers), so I don't squint at tiny sprites.
+- **As a player**, I want the art to have texture (not flat colors), so the world feels handcrafted.
+- **As a player**, I want the UI to be minimal, so the game view isn't cluttered.
+
+## Technical Requirements
+
+### Visual Standards
+1. **Character Sprites:**
+   - Size: 32x48px (matches existing system)
+   - Style: Stardew Valley-inspired (soft outlines, expressive faces)
+   - Color Palette: Muted tones (avoid neon/oversaturated colors)
+   - Texture: Add grain/noise overlay (5% opacity) to avoid flatness
+
+2. **Prop Design:**
+   - Size: 16x16px to 32x32px (depending on type)
+   - Detail: Enough to be identifiable, not cluttered
+   - Crime Props: Slightly desaturated (blood is dark red, not bright)
+   - Herring Props: Visually similar to Crime props (intentional confusion)
+
+3. **Environment Tiles:**
+   - Grass: `0x2E7D32` (from `system.md`, add texture overlay)
+   - Dirt: `0x795548` (add pebble details)
+   - Water: `0x29B6F6` (animated ripples via shader if possible)
+   - Walls: `0x424242` (add brick texture)
+
+4. **UI Elements:**
+   - Minimal overlays (no cluttered HUD)
+   - Dialogue: Bottom-third banner (dark BG, white text)
+   - Evidence Bag: Sidebar (slides in from right)
+   - Inspection UI: Center modal (prop close-up, 200x200px)
+
+### Constraints (from `system.md`)
+- Mugshot rendering: `scale(4)`, `x(35)`, `y(5)` for 200x200 canvas
+- Pixi v8 rendering with `zIndex: y` for layering
+- No localStorage (all UI state in Zustand)
+
+## Dependencies
+- [ ] `PropSystem` (prop visual design)
+- [ ] `InspectionSystem` (UI layout)
+- [ ] `DialogueSystem` (dialogue UI design)
+
+## Definition of Done
+- [ ] All sprites have texture overlays (not flat)
+- [ ] Color palette is muted (no oversaturation)
+- [ ] UI elements are minimal (no visual clutter)
+- [ ] Mugshot rendering uses correct scale/position
+- [ ] Crime props are visually distinct but not obvious
+</code>
+
+feature_confrontation_system.md:
+<code>
+# Feature: Confrontation System
+**Version:** 1.0.0 | **Phase:** 2 → 3 | **Priority:** CRITICAL
+
+## Experience Goal
+**The Vibe:** *Damned If You Do, Damned If You Don't*
+This is the moral crescendo. The player has found the killer, but now they face the game's central dilemma: **Apprehend the killer (and face the victim count) OR defuse the Crisis (and let the killer escape).** There is no "good" ending. The UI should feel heavy—like choosing which lives to prioritize. The post-choice screen should make the player sit with their decision.
+
+## User Stories
+- **As a player**, I want to choose between arresting the killer or saving lives, so the game respects my agency.
+- **As a player**, I want the victim count to be revealed only AFTER I choose arrest, so there's no "optimal" path.
+- **As a player**, I want the Crisis to feel urgent but vague, so I don't know if it's a bluff.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+confrontationState: {
+  killerFound: boolean,
+  choiceMade: 'arrest' | 'crisis' | null,
+  victimCount: number, // Hidden until arrest
+  crisisType: 'bomb' | 'poison' | 'hostage' | 'bluff',
+  crisisActive: boolean
+}
+```
+
+### Logic Rules
+1. **Trigger Condition:**
+   - Player clicks killer + Evidence Bag has 3+ Crime props
+   - Opens Confrontation UI (full-screen modal, dark vignette)
+
+2. **Choice Mechanics:**
+   - **Option A: Apprehend**
+     - Roll victimCount = `killerState.crimeCount + random(0-2)` (uncertainty!)
+     - Reveal victim count in post-game screen
+     - `convictionScore` calculated based on evidence quality
+   - **Option B: Crisis**
+     - Spawn Crisis UI (timer, clue hunt)
+     - Killer escapes (sets `killerFound = false`)
+     - If Crisis is defused, save lives BUT killer is still loose
+
+3. **Victim Count Logic:**
+   - Based on:
+     - Crime vignettes spawned (each = 1 victim)
+     - Props tagged as "victim-adjacent" (bloodstains, personal items)
+     - Killer archetype (psychopath = higher count)
+   - Formula: `victimCount = vignetteCount + (archetype === 'psychopath' ? 2 : 0)`
+
+4. **Crisis Types:**
+   - **Bomb (40%):** 60-second timer, must find 3 wires in city
+   - **Poison (30%):** Must identify contaminated water source
+   - **Hostage (20%):** Must reach specific location before timer
+   - **Bluff (10%):** No actual crisis, wastes player's time (reinforces theme)
+
+### Constraints
+- Must tie into `gameStore.convictionScore`
+- Cannot show victimCount before choice is made (no metagaming)
+- Crisis must use existing prop spawn system (no new art assets)
+
+## Dependencies
+- [ ] `KillerActionSystem` (victimCount calculation)
+- [ ] `CrisisSystem` (scenario logic)
+- [ ] `EvidenceSystem` (convictionScore calculation)
+
+## Definition of Done
+- [ ] Confrontation UI appears after finding killer with 3+ evidence
+- [ ] Choosing "Arrest" reveals victim count post-game
+- [ ] Choosing "Crisis" spawns scenario and lets killer escape
+- [ ] Bluff Crisis appears 10% of the time (player learns distrust)
+- [ ] Post-game screen displays moral weight of choice (somber UI)
+</code>
+
+feature_crisis_system.md:
+<code>
+# Feature: Crisis System
+**Version:** 1.0.0 | **Phase:** 2 → 3 | **Priority:** HIGH
+
+## Experience Goal
+**The Vibe:** *Ticking Clock of Helplessness*
+The Crisis is the game's way of saying, "You can't have it all." It's a second detective game within the first—but this time, lives are actively at stake. The player should feel rushed but methodical, knowing that even if they succeed, the killer is still out there. The game ends in bittersweet victory at best.
+
+## User Stories
+- **As a player**, I want Crisis scenarios to feel distinct (bomb, poison, hostage), so replaying isn't predictable.
+- **As a player**, I want Crises to have environmental clues (not just UI timers), so it feels integrated into the world.
+- **As a player**, I want some Crises to be bluffs, so I learn to distrust the killer's final move.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+crisisScenario: {
+  type: 'bomb' | 'poison' | 'hostage' | 'bluff',
+  timeLimit: number, // Seconds
+  cluesRequired: number,
+  cluesFound: Prop[],
+  resolved: boolean,
+  livesSaved: number
+}
+```
+
+### Logic Rules
+1. **Spawn Trigger:**
+   - Player chooses "Crisis" in Confrontation System
+   - Spawns props/UI based on `crisisType`
+
+2. **Crisis Mechanics:**
+
+   **BOMB (Level 1-2):**
+   - Spawns 3 wire props in random locations
+   - Player must click wires in sequence (1 → 2 → 3)
+   - Timer: 60 seconds
+   - Success: Saves 5-10 lives | Failure: Game over
+
+   **POISON (Level 2-3):**
+   - Spawns contaminated water prop (fountain, well)
+   - Player must inspect 5 NPCs to find symptoms (vomiting, pale skin)
+   - Timer: 90 seconds
+   - Success: Saves 10-20 lives | Failure: Partial save (50%)
+
+   **HOSTAGE (Level 3+):**
+   - Spawns locked door prop
+   - Player must find key (hidden in container prop)
+   - No timer, but killerHeat increases rapidly
+   - Success: Saves 1 life (personal, emotional impact)
+
+   **BLUFF (All Levels, 10% chance):**
+   - No actual Crisis exists
+   - Reveals after 30 seconds of searching
+   - Player realizes they were deceived (reinforces killer's cunning)
+
+3. **Integration with Victim Count:**
+   - Crisis success reduces `victimCount` displayed in post-game
+   - Bluff Crisis adds psychological weight (killer is mocking you)
+
+4. **Level Scaling:**
+   - Level 1: Only Bomb
+   - Level 2: Bomb + Poison
+   - Level 3+: All types (including Hostage)
+
+### Constraints
+- Must reuse existing prop types (no new assets)
+- Timer must be visual (on-screen countdown, not just in gameStore)
+- Crisis cannot be skipped (forces player to commit)
+
+## Dependencies
+- [ ] `ConfrontationSystem` (triggers Crisis)
+- [ ] `PropSystem` (spawns Crisis-specific props)
+- [ ] `VignetteSystem` (placement logic)
+
+## Definition of Done
+- [ ] 4 distinct Crisis types (Bomb, Poison, Hostage, Bluff)
+- [ ] Timer is visible on-screen (UI overlay)
+- [ ] Success/failure affects post-game victim count
+- [ ] Bluff Crisis triggers 10% of the time
+- [ ] Crisis props are distinct from crime props (visual clarity)
+</code>
+
+feature_dialogue_system.md:
+<code>
+# Feature: Dialogue System
+**Version:** 1.0.0 | **Phase:** 0 → 1 | **Priority:** HIGH
+
+## Experience Goal
+**The Vibe:** *Paranoia Through Banality*
+Every NPC should feel like a potential suspect. The killer's dialogue is hidden among 24 other civilians who are equally evasive, annoying, or helpful. The player must learn to detect *micro-tells*—slight inconsistencies, nervous phrasing, knowledge they shouldn't have. The system should make you doubt your own judgments.
+
+## User Stories
+- **As a player**, I want NPCs to give varied responses (helpful/evasive/irrelevant), so dialogue doesn't feel like a menu system.
+- **As a player**, I want the killer to subtly betray themselves through dialogue inconsistencies, so I can deduce their identity without explicit "clues."
+- **As a player**, I want dialogue to reference nearby props/evidence, so the world feels reactive and integrated.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+// Per-Actor State
+actor: {
+  dialogueProfile: 'helpful' | 'evasive' | 'nervous' | 'gossip',
+  memoryBank: string[], // References to nearby vignettes/props
+  hasBeenQuestioned: boolean,
+  suspicionLevel: number // Affects future dialogue tone
+}
+
+// Killer-Specific
+killerDialogue: {
+  archetype: string, // Links to killerState.personality
+  lies: string[], // Stored alibis (can contradict evidence)
+  hintTriggers: { propId: string, response: string }[]
+}
+```
+
+### Logic Rules
+1. **Dialogue Priority (InteractionRouter):**
+```
+   Click Actor → Check isKiller → Load killerDialogue : Load civilianDialogue
+```
+   
+2. **Civilian Dialogue Types:**
+   - **Helpful (20%):** Provides vague directional hints ("I saw someone near the fountain")
+   - **Evasive (40%):** Deflects ("Why are you asking me?"), increases suspicionLevel
+   - **Nervous (15%):** Acts guilty even if innocent (red herring mechanic)
+   - **Gossip (25%):** References other NPCs ("That guy in the suit seemed off")
+
+3. **Killer Dialogue Mechanics:**
+   - **Consistency Check:** Killer's alibi is stored. If questioned twice, responses are compared.
+   - **Prop-Triggered Hints:** If player inspects a weapon, then questions killer, dialogue shifts:
+```
+     Normal: "I've been here all day."
+     Post-Weapon: "That thing? Probably just a tool someone left behind."
+```
+   - **Stress Escalation:** Each question increases `killerHeat` by 2 (they know they're being watched)
+
+4. **Integration with Evidence:**
+   - Dialogue responses can generate `testimonialEvidence` items in Evidence System
+   - Contradictory statements are flagged if Evidence Bag contains conflicting props
+
+### Constraints
+- Must hook into existing `InteractionRouter` (second-highest priority)
+- Cannot use form elements (React 19 restriction from `system.md`)
+- Dialogue UI must be minimal (no text boxes cluttering the 2.5D view)
+
+## Dependencies
+- [ ] `InteractionRouter` (framework exists, needs dialogue hook)
+- [ ] `EvidenceSystem` (testimonial evidence storage)
+- [ ] `KillerActionSystem` (killerHeat integration)
+
+## Definition of Done
+- [ ] Clicking any actor triggers dialogue (no more "Just a suit" fallback)
+- [ ] Killer's dialogue contains 2-3 subtle inconsistencies per game
+- [ ] Civilian dialogue references nearby vignettes (contextual awareness)
+- [ ] Questioning the same NPC twice yields slightly different responses
+- [ ] Dialogue UI renders without blocking game view (overlay/sidebar)
+</code>
+
+feature_evidence_system.md:
+<code>
+# Feature: Evidence System
+**Version:** 1.0.0 | **Phase:** 1 → 2 | **Priority:** HIGH
+
+## Experience Goal
+**The Vibe:** *Building a Case (That Might Be Wrong)*
+The Evidence Bag is the player's "proof"—but it's subjective. The game doesn't tell you if you're right. The player must trust their own judgment, knowing that red herrings exist and that even "good" evidence can lead to the wrong suspect. The system should feel like building a conspiracy board: connections are emergent, not explicit.
+
+## User Stories
+- **As a player**, I want to collect props as evidence, so I can reference them later.
+- **As a player**, I want to remove evidence, so I can revise my theory.
+- **As a player**, I want testimony (from Dialogue) to be stored separately from physical evidence, so I can cross-reference.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+evidenceBag: {
+  physicalEvidence: Prop[],
+  testimony: { actor: string, statement: string, timestamp: number }[],
+  convictionScore: number, // Auto-calculated
+  contradictions: string[] // Flagged inconsistencies
+}
+```
+
+### Logic Rules
+1. **Adding Evidence:**
+   - Inspection UI shows "Add to Evidence" button
+   - Prop is copied to `evidenceBag.physicalEvidence` (not removed from world)
+
+2. **Removing Evidence:**
+   - Player opens Evidence Bag UI (sidebar or overlay)
+   - Click evidence → Confirm removal
+
+3. **Conviction Score Calculation:**
+```
+   convictionScore = (crimeProps * 20) + (testimonies * 10) - (herrings * 15)
+```
+   - Crime props: +20 points each
+   - Testimonies: +10 points each
+   - Red herrings: -15 points (penalties for false positives)
+
+4. **Contradiction Detection:**
+   - System compares testimony timestamps with prop locations
+   - Example: Actor says "I was at the park" but evidence shows weapon at docks
+   - Flags contradiction in UI (red highlight)
+
+5. **Integration with Confrontation:**
+   - Confrontation requires 3+ evidence items
+   - `convictionScore > 60` = "Strong case" (post-game feedback)
+   - `convictionScore < 40` = "Weak case" (higher victim count reveal)
+
+### Constraints
+- Cannot use localStorage (from `system.md`, must use Zustand)
+- UI must be minimal (sidebar, not full-screen takeover)
+- Evidence Bag must persist across Interrogations (state continuity)
+
+## Dependencies
+- [ ] `InspectionSystem` (physical evidence collection)
+- [ ] `DialogueSystem` (testimony collection)
+- [ ] `ConfrontationSystem` (score validation)
+
+## Definition of Done
+- [ ] Props can be added to Evidence Bag from Inspection UI
+- [ ] Testimony is stored separately from physical evidence
+- [ ] Conviction Score auto-calculates (visible in Evidence Bag UI)
+- [ ] Contradictions are flagged with red highlights
+- [ ] Evidence Bag requires 3+ items to trigger Confrontation
+</code>
+
+feature_inspection_system.md:
+<code>
+# Feature: Inspection System
+**Version:** 1.0.0 | **Phase:** 0 → 1 | **Priority:** HIGH
+
+## Experience Goal
+**The Vibe:** *Obsessive Detective*
+The world is a crime scene, and every object is a potential clue. The player should feel rewarded for slowing down and examining details. But there's a catch: not every "clue" is real. Red herrings are intentionally designed to waste time, mirroring the theme: "You can't save everyone, and searching for the truth has a cost."
+
+## User Stories
+- **As a player**, I want to click on props to reveal hidden details, so I can piece together the crime.
+- **As a player**, I want some props to be red herrings, so the game isn't just "click everything."
+- **As a player**, I want container props (bags, trash cans) to hide items, so exploration feels layered.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+prop: {
+  id: string,
+  type: 'crime' | 'herring' | 'ambiance' | 'container',
+  description: string,
+  hiddenItems?: Prop[], // For containers
+  evidenceValue: number, // 0-100, how useful this is
+  inspected: boolean
+}
+```
+
+### Logic Rules
+1. **Prop Types:**
+   - **Crime (20%):** Directly tied to killer (weapon, victim clothing)
+   - **Herring (30%):** Looks suspicious but irrelevant (rusty knife in garden)
+   - **Ambiance (40%):** World-building (discarded coffee cup, graffiti)
+   - **Container (10%):** Contains 1-3 sub-props (bags, lockers, dumpsters)
+
+2. **Inspection UI:**
+   - Click prop → Show close-up modal (prop name, description, "Add to Evidence" button)
+   - Container props → Require second click to "Search Inside"
+   - Must respect Pixi v8 hitArea rules (`system.md` interaction constraints)
+
+3. **Evidence Value Scoring:**
+   - Crime props: evidenceValue = 80-100
+   - Herrings: evidenceValue = 10-30 (look useful, aren't)
+   - Ambiance: evidenceValue = 0
+   - Killer-specific props have hidden modifiers (e.g., professional's poison has +20)
+
+4. **Container Logic:**
+   - Containers can hold 1 Crime + 2 Ambiance props (mixed signals)
+   - Searching a container takes 5 seconds (killerHeat increases)
+
+### Constraints (from `system.md`)
+- Props must use `eventMode="static"` for clicks
+- Must define explicit `hitArea` (Rectangle) for decals
+- Z-index must be `y` value for proper layering
+
+## Dependencies
+- [ ] `PropSystem` (static/dynamic prop spawn logic)
+- [ ] `VignetteSystem` (crime props are tied to vignettes)
+- [ ] `EvidenceSystem` (stores inspected items)
+
+## Definition of Done
+- [ ] Clicking any prop shows Inspection UI
+- [ ] Container props reveal hidden items on second click
+- [ ] Crime props have higher evidenceValue than herrings
+- [ ] Inspecting 5+ props increases convictionScore accuracy
+- [ ] Red herrings deliberately mislead player (e.g., bloody knife in butcher shop)
+</code>
+
+feature_interrogation_system.md:
+<code>
+# Feature: Interrogation System
+**Version:** 1.0.0 | **Phase:** 1 → 2 | **Priority:** MEDIUM
+
+## Experience Goal
+**The Vibe:** *Pressure Cooker*
+This is the "deep dive" interaction—when the player commits to focusing on one suspect. The UI should feel claustrophobic (close-up mugshot, limited time, high stakes). Every question narrows the possibility space but also risks spooking the killer if you're wrong. It's the moment where the player goes from "gathering info" to "making an accusation."
+
+## User Stories
+- **As a player**, I want to interrogate suspects in a focused mode, so I can extract more detailed information than casual dialogue.
+- **As a player**, I want interrogation to have a cost (time, killerHeat), so it's a meaningful decision, not a spam-click.
+- **As a player**, I want the killer to have unique interrogation responses that tie to evidence, so I can cross-reference props with testimony.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+interrogationState: {
+  target: Actor,
+  questionsAsked: string[],
+  responsesGiven: string[],
+  stressLevel: number, // Affects response quality
+  timeRemaining: number // Soft cap, not hard timer
+}
+```
+
+### Logic Rules
+1. **Entry Condition:**
+   - Player must right-click (or hold-click) an actor to enter Interrogation Mode
+   - Costs 10 seconds of game time (killerHeat increases during this period)
+
+2. **Question Types:**
+   - **Alibi:** "Where were you at [time]?" (references vignette timestamps)
+   - **Observation:** "Did you see anything unusual?" (checks actor's proximity to crime)
+   - **Motive:** "What's your relationship with [victim]?" (generates if victim prop exists)
+
+3. **Killer-Specific Responses:**
+   - Links to `KillerArchetype`:
+     - `professional`: Calm, over-prepared alibis (too perfect = suspicious)
+     - `psychopath`: Erratic, may slip incriminating details if stressed
+     - `opportunist`: Changes story if asked same question twice
+
+4. **Integration with Inspection System:**
+   - If player has inspected props near the actor, interrogation reveals additional context
+   - Example: "You found a bloody knife. This NPC was within 50px of it. Interrogation now includes: 'Do you recognize this weapon?'"
+
+### Constraints
+- Must pause actor movement (they stand still during interrogation)
+- UI must show actor's mugshot (200x200 canvas, `system.md` centering rules)
+- Cannot exceed 3 interrogations per game (resource scarcity)
+
+## Dependencies
+- [ ] `DialogueSystem` (interrogation is a deeper layer of dialogue)
+- [ ] `InspectionSystem` (prop-context integration)
+- [ ] `EvidenceSystem` (testimony storage)
+
+## Definition of Done
+- [ ] Right-clicking an actor opens Interrogation UI
+- [ ] Killer gives 1-2 inconsistent responses when interrogated
+- [ ] Interrogation increases killerHeat by 5 points
+- [ ] Player can ask up to 5 questions before NPC "closes off"
+- [ ] Testimony is added to Evidence Bag as separate entries
+</code>
+
+feature_killer_action_system.md:
+<code>
+
+</code>
+
+feature_killer_heat_system.md:
+<code>
+# Feature: Killer Heat System
+**Version:** 1.0.0 | **Phase:** 0 → 1 | **Priority:** CRITICAL
+
+## Experience Goal
+**The Vibe:** *The World Is Watching You (And So Is the Killer)*
+Heat should be the game's invisible director. As it rises, the city should feel "tighter"—civilians move faster, avoid eye contact, the killer becomes more aggressive. The player doesn't see a number; they feel the simulation reacting to their presence. This is how we create dread without jump scares.
+
+## User Stories
+- **As a player**, I want the world to feel more tense as time passes, so inaction has atmospheric consequences.
+- **As a player**, I want civilians to react to high Heat (flee, gossip, avoid me), so the simulation feels reactive.
+- **As a player**, I want the killer to act more boldly at high Heat, so the endgame feels desperate.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+killerHeat: {
+  value: number, // 0-100
+  sources: {
+    timeElapsed: number,
+    crimesCommitted: number,
+    playerInterrogations: number,
+    witnessedVignettes: number
+  },
+  thresholds: {
+    nervous: 30, // Civilians start fidgeting
+    flee: 70,    // Civilians avoid player
+    cascade: 90  // Killer enters "spree mode"
+  }
+}
+```
+
+### Logic Rules
+1. **Heat Calculation:**
+```
+   killerHeat = (timeElapsed * 0.1) + (crimesCommitted * 10) + (interrogations * 2) + (witnessedVignettes * 5)
+```
+
+2. **Civilian Behavior Integration:**
+   - **Heat < 30:** Normal wander (from `useCivilianSystem`)
+   - **Heat 30-70:** Nervous state (faster movement, avoid player clicks)
+   - **Heat > 70:** Flee state (run from player, `waitTimer = 0` per `system.md`)
+
+3. **Killer Behavior Integration:**
+   - **Heat < 50:** Normal cooldown between crimes
+   - **Heat 50-90:** Cooldown reduced by 50%
+   - **Heat > 90:** Cascade mode (commit crime every 20 seconds)
+
+4. **Visual Feedback (No UI):**
+   - Heat 30+: Civilians glance at player more frequently
+   - Heat 50+: Ambient sound gets louder (footsteps echo)
+   - Heat 70+: Screen vignette darkens slightly (subtle, not heavy-handed)
+   - Heat 90+: Killer's debug highlight (if enabled) pulses red
+
+### Constraints (from `system.md`)
+- Heat must trigger behavioral changes in `useCivilianSystem`
+- Flee state MUST set `waitTimer = 0` (architecture requirement)
+- Cannot display Heat as a number (atmospheric system, not gamified)
+
+## Dependencies
+- [ ] `CivilianSystem` (behavior state machine)
+- [ ] `KillerActionSystem` (cooldown modifiers)
+- [ ] `World.tsx` (global state management)
+
+## Definition of Done
+- [ ] Heat increases based on time, crimes, and player actions
+- [ ] Civilians flee when Heat > 70 (testable via debug mode)
+- [ ] Killer's crime cooldown shortens at Heat > 50
+- [ ] Screen vignette darkens at Heat > 70 (visual feedback)
+- [ ] Cascade mode (Heat > 90) triggers rapid crimes
+</code>
+
+feature_progression_system.md:
+<code>
+# Feature: Progression & Level Scaling
+**Version:** 1.0.0 | **Phase:** 3 → 4 | **Priority:** LOW (Post-MVP)
+
+## Experience Goal
+**The Vibe:** *Escalating Complexity, Diminishing Returns*
+Each level should feel harder, but not because of artificial difficulty spikes. The world gets more crowded (more NPCs = more suspects), more props appear (more noise to sift through), and the killer gets smarter (better alibis, more bluffs). The player should feel like they're getting better at the game, but the game is also getting better at fooling them.
+
+## User Stories
+- **As a player**, I want each level to introduce new challenges, so the game doesn't feel repetitive.
+- **As a player**, I want levels to have distinct environments (park, docks, subway), so each feels unique.
+- **As a player**, I want the difficulty to scale organically (not just "more enemies"), so it feels fair.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+levelConfig: {
+  levelNumber: number,
+  environment: 'park' | 'docks' | 'subway' | 'mall' | 'hospital',
+  population: number, // NPC count
+  propDensity: number, // Props per 100px²
+  herringRatio: number, // % of props that are red herrings
+  crisisTypes: string[], // Available Crisis scenarios
+  killerArchetypes: string[] // Unlocked personalities
+}
+```
+
+### Logic Rules
+1. **Level Scaling:**
+
+   **Level 1 (Tutorial):**
+   - Environment: Small park
+   - Population: 15 NPCs
+   - Props: 30 (10% herrings)
+   - Crisis: Bomb only
+   - Killer: Professional (easy, methodical)
+
+   **Level 2:**
+   - Environment: Docks
+   - Population: 25 NPCs
+   - Props: 50 (20% herrings)
+   - Crisis: Bomb + Poison
+   - Killer: Professional OR Opportunist
+
+   **Level 3:**
+   - Environment: Subway station
+   - Population: 40 NPCs
+   - Props: 80 (30% herrings)
+   - Crisis: All types (including Hostage)
+   - Killer: Any archetype (including Psychopath)
+
+   **Level 4+:**
+   - Environment: Mall, Hospital (large, complex layouts)
+   - Population: 60+ NPCs
+   - Props: 120+ (40% herrings)
+   - Crisis: All types + Bluffs
+   - Killer: Spree mode unlocked
+
+2. **Environment-Specific Mechanics:**
+   - Park: Open sight lines (easier to spot vignettes)
+   - Docks: Containers everywhere (more search time)
+   - Subway: Crowds + chokepoints (NPCs cluster)
+   - Mall: Multi-floor (requires navigation)
+
+3. **Post-Game Unlocks:**
+   - Completing Level 1 unlocks Opportunist killer
+   - Completing Level 2 unlocks Psychopath killer
+   - Completing Level 3 unlocks Spree mode
+   - Perfect run (convictionScore > 80) unlocks Hard Mode
+
+### Constraints
+- Cannot use localStorage (Zustand only, from `system.md`)
+- Levels must reuse existing prop types (no new assets per level)
+- Population scales with performance (cap at 60 NPCs)
+
+## Dependencies
+- [ ] All core systems (Killer, Civilian, Evidence, Crisis)
+- [ ] `VignetteSystem` (environment-specific vignettes)
+- [ ] `PropSystem` (herring ratio scaling)
+
+## Definition of Done
+- [ ] 3 distinct levels with unique environments
+- [ ] Population scales 15 → 25 → 40 NPCs
+- [ ] Herring ratio scales 10% → 20% → 30%
+- [ ] Crisis types unlock progressively
+- [ ] Post-game screen shows level completion stats
+</code>
+
+feature_prop_system.md:
+<code>
+
+</code>
+
+feature_vignette_system.md:
+<code>
+# Feature: Vignette System
+**Version:** 1.0.0 | **Phase:** 0 (Exists) → 1 (Expand) | **Priority:** MEDIUM
+
+## Experience Goal
+**The Vibe:** *Environmental Storytelling*
+Vignettes are the game's "show, don't tell" mechanism. A bloodstain + discarded glove + kicked-over chair tells a story without dialogue. The player should feel like a crime scene investigator, piecing together narrative fragments. But not every vignette is a crime—some are just life happening (couple arguing, kids playing), which makes the real clues harder to spot.
+
+## User Stories
+- **As a player**, I want vignettes to tell micro-stories, so the world feels lived-in.
+- **As a player**, I want crime vignettes to be distinct from normal ones, so I can identify patterns.
+- **As a player**, I want vignettes to be tailored to the level's location (park, docks, subway), so environments feel unique.
+
+## Technical Requirements
+
+### Data Structures
+```typescript
+vignette: {
+  id: string,
+  type: 'crime' | 'normal',
+  props: Prop[],
+  location: { x: number, y: number },
+  narrative: string, // Optional flavor text
+  linkedKiller?: string // If crime vignette
+}
+```
+
+### Logic Rules
+1. **Spawn Logic:**
+   - Crime vignettes: Spawned by `KillerActionSystem` (1 per crime)
+   - Normal vignettes: Spawned during map generation (5-10 per level)
+
+2. **Crime Vignette Design:**
+   - Must include 2-3 Crime props (weapon, victim item, evidence)
+   - Props are spatially clustered (within 50px)
+   - Linked to `killerArchetype` (professional uses clean vignettes, psychopath uses chaotic ones)
+
+3. **Normal Vignette Examples:**
+   - Park: Picnic setup (blanket, basket, ball)
+   - Docks: Fishing gear (rod, net, bait)
+   - Subway: Lost-and-found items (umbrella, phone, bag)
+
+4. **Location-Based Props:**
+   - Park: Organic items (flowers, benches, trash)
+   - Docks: Industrial (crates, ropes, barrels)
+   - Subway: Urban (graffiti, turnstiles, advertisements)
+
+5. **Integration with Witness System:**
+   - NPCs within 100px of crime vignette become "Witnesses"
+   - Their dialogue references the vignette ("I saw someone near the fountain")
+
+### Constraints (from `system.md`)
+- Vignettes must be registered in `KillerRegistry.ts` (crime type mapping)
+- Witness checks occur in `World.tsx` before `pendingVignetteSpawn` clears
+
+## Dependencies
+- [ ] `KillerActionSystem` (crime vignette spawn trigger)
+- [ ] `PropSystem` (vignette composition)
+- [ ] `DialogueSystem` (Witness integration)
+
+## Definition of Done
+- [ ] Crime vignettes spawn after each killer action
+- [ ] Normal vignettes populate map (5-10 per level)
+- [ ] Vignettes are location-appropriate (docks ≠ park props)
+- [ ] Witnesses reference nearby vignettes in dialogue
+- [ ] Crime vignettes match killer archetype (clean vs. chaotic)
+</code>
+

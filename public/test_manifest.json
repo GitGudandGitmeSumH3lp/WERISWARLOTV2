@@ -1,0 +1,74 @@
+{
+  "spritesheet": "/test_spritesheet.png",
+  "frames": {
+    "test_prop": {
+      "x": 0,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    },
+    "test_npc": {
+      "x": 16,
+      "y": 0,
+      "w": 16,
+      "h": 24
+    },
+    "test_tile": {
+      "x": 32,
+      "y": 0,
+      "w": 32,
+      "h": 32
+    },
+    "bench": {
+      "x": 64,
+      "y": 0,
+      "w": 32,
+      "h": 16
+    },
+    "civilian_male_01": {
+      "x": 96,
+      "y": 0,
+      "w": 16,
+      "h": 24
+    },
+    "bloodstain_small": {
+      "x": 112,
+      "y": 0,
+      "w": 16,
+      "h": 16
+    }
+  },
+  "metadata": {
+    "test_npc": {
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "type": "npc"
+    },
+    "test_tile": {
+      "type": "tile"
+    },
+    "bench": {
+      "anchor": {
+        "x": 0.5,
+        "y": 0.8
+      },
+      "type": "prop"
+    },
+    "civilian_male_01": {
+      "anchor": {
+        "x": 0.5,
+        "y": 1.0
+      },
+      "type": "npc"
+    },
+    "bloodstain_small": {
+      "anchor": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "type": "prop"
+    }
+  }
+}

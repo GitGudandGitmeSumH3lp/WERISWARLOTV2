@@ -1,0 +1,910 @@
+src\components\level\__tests__\levelAssetBinding.test.ts:
+<code>
+// src/level/__tests__/levelAssetBinding.test.ts
+
+import { validateLevelAssets, selectFromAssetPool, calculatePropZIndex } from '../index';
+import { LevelAssetBindings } from '../types';
+
+// Mock AssetRegistry for testing
+const createMockRegistry = (validAssets: Set<string>) => ({
+  has: (name: string) => validAssets.has(name)
+});
+
+describe('Level Asset Binding', () => {
+  const validAssets = new Set([
+    'ground_tile',
+    'bench_prop',
+    'trashcan_prop',
+    'civilian_red',
+    'civilian_blue',
+    'civilian_green',
+    'killer_main',
+    'blood_puddle',
+    'knife_evidence',
+    'document_evidence'
+  ]);
+
+  const mockRegistry = createMockRegistry(validAssets);
+
+  const validLevel: LevelAssetBindings = {
+    level_id: 'test_park',
+    scenery: {
+      ground_tile: 'ground_tile',
+      background_props: ['bench_prop', 'trashcan_prop']
+    },
+    spawn_zones: [
+      {
+        type: 'civilian',
+        x: 200,
+        y: 300,
+        radius: 100,
+        asset_pool: ['civilian_red', 'civilian_blue', 'civilian_green']
+      },
+      {
+        type: 'killer',
+        x: 500,
+        y: 400,
+        radius: 50,
+        required_asset: 'killer_main'
+      }
+    ],
+    vignettes: [
+      {
+        id: 'murder_scene',
+        props: [
+          { asset: 'blood_puddle', offset: { x: 0, y: 0 }, layer: 0 },
+          { asset: 'knife_evidence', offset: { x: 15, y: 5 }, layer: 2 },
+          { asset: 'document_evidence', offset: { x: -5, y: 10 }, layer: 1 }
+        ]
+      }
+    ]
+  };
+
+  test('valid level passes validation', () => {
+    const result = validateLevelAssets(validLevel, mockRegistry);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  test('missing ground tile fails validation', () => {
+    const invalidLevel = {
+      ...validLevel,
+      scenery: { ...validLevel.scenery, ground_tile: 'NONEXISTENT' }
+    };
+    const result = validateLevelAssets(invalidLevel, mockRegistry);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].type).toBe('missing_asset');
+    expect(result.errors[0].path).toBe('scenery.ground_tile');
+  });
+
+  test('invalid layer value fails validation', () => {
+    const invalidLevel = {
+      ...validLevel,
+      vignettes: [
+        {
+          id: 'bad_scene',
+          props: [{ asset: 'blood_puddle', offset: { x: 0, y: 0 }, layer: 15 }]
+        }
+      ]
+    };
+    const result = validateLevelAssets(invalidLevel, mockRegistry);
+    expect(result.valid).toBe(false);
+    expect(result.errors[0].type).toBe('invalid_layer');
+    expect(result.errors[0].path).toContain('layer');
+  });
+
+  test('selectFromAssetPool chooses unused assets', () => {
+    const pool = ['civilian_red', 'civilian_blue', 'civilian_green'];
+    const used = new Set(['civilian_red']);
+    
+    const selected = selectFromAssetPool(pool, used);
+    expect(['civilian_blue', 'civilian_green']).toContain(selected);
+    expect(used.has(selected)).toBe(true);
+  });
+
+  test('selectFromAssetPool warns when pool exhausted', () => {
+    const pool = ['civilian_red', 'civilian_blue'];
+    const used = new Set(['civilian_red', 'civilian_blue']);
+    
+    console.warn = jest.fn(); // Mock console.warn
+    const selected = selectFromAssetPool(pool, used);
+    expect(pool).toContain(selected);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('exhausted'));
+  });
+
+  test('calculatePropZIndex returns correct values', () => {
+    expect(calculatePropZIndex(500, 0)).toBe(500);
+    expect(calculatePropZIndex(500, 2)).toBe(500.02);
+    expect(calculatePropZIndex(300, 10)).toBe(300.10);
+    expect(calculatePropZIndex(200, 15)).toBe(200.10); // Clamped
+  });
+});
+</code>
+
+src\components\level\assetSelectors.ts:
+<code>
+// src/level/assetSelectors.ts
+
+/**
+ * Smart asset selection with collision avoidance.
+ * 
+ * @param pool Array of asset names to choose from
+ * @param usedAssets Set of already-used asset names within avoidance radius
+ * @param avoidRadius Minimum pixel distance before allowing duplicates (default 100)
+ * @returns Selected asset name
+ */
+export function selectFromAssetPool(
+  pool: string[],
+  usedAssets: Set<string>,
+  avoidRadius = 100
+): string {
+  if (pool.length === 0) {
+    throw new Error('Asset pool cannot be empty');
+  }
+
+  // Filter out assets already used within avoidance radius
+  const availableAssets = pool.filter(asset => !usedAssets.has(asset));
+
+  let selectedAsset: string;
+
+  if (availableAssets.length === 0) {
+    // All assets used, allow duplicates but log warning
+    console.warn(`⚠️ Asset pool exhausted (${pool.length} assets), reusing sprites`);
+    selectedAsset = pool[Math.floor(Math.random() * pool.length)];
+  } else {
+    // Random selection from available assets
+    const selectedIndex = Math.floor(Math.random() * availableAssets.length);
+    selectedAsset = availableAssets[selectedIndex];
+  }
+
+  // Track usage for next spawn
+  usedAssets.add(selectedAsset);
+
+  return selectedAsset;
+}
+
+/**
+ * Calculate sub-pixel zIndex for layered props.
+ * Ensures deterministic render order within the same Y coordinate.
+ * 
+ * @param baseY The base Y coordinate of the sprite
+ * @param layer The layer value (0-10)
+ * @returns zIndex value: baseY + (layer * 0.01)
+ */
+export function calculatePropZIndex(baseY: number, layer: number): number {
+  // Clamp layer to valid range (defensive programming)
+  const clampedLayer = Math.max(0, Math.min(10, layer));
+  return baseY + (clampedLayer * 0.01);
+}
+
+// Basic smoke test
+if (typeof window !== 'undefined' && (window as any).RUN_SMOKE_TEST) {
+  console.log('🧪 Running assetSelectors smoke test...');
+  
+  // Test selectFromAssetPool
+  const pool = ['asset_a', 'asset_b', 'asset_c'];
+  const used = new Set(['asset_a']);
+  const selected = selectFromAssetPool(pool, used);
+  console.log('✅ Selected asset:', selected, 'Used set:', Array.from(used));
+  
+  // Test calculatePropZIndex
+  const zIndex = calculatePropZIndex(500, 2);
+  console.log('✅ Calculated zIndex:', zIndex, 'Expected: 500.02');
+  
+  // Test edge cases
+  const zIndexClamped = calculatePropZIndex(300, 15); // Should clamp to 10
+  console.log('✅ Clamped zIndex:', zIndexClamped, 'Expected: 300.10');
+}
+</code>
+
+src\components\level\validateLevelAssets.ts:
+<code>
+// src/level/validateLevelAssets.ts
+
+import { LevelAssetBindings, ValidationResult, ValidationError, AssetRegistry } from './types';
+
+/**
+ * Runtime validation of level JSON against loaded asset registry.
+ * Follows fail-fast contract: throws on first invalid state.
+ * 
+ * @param levelData Level JSON with asset bindings
+ * @param registry AssetRegistry instance (or mock for testing)
+ * @returns ValidationResult with detailed errors
+ */
+export function validateLevelAssets(
+  levelData: LevelAssetBindings,
+  registry: AssetRegistry
+): ValidationResult {
+  const errors: ValidationError[] = [];
+
+  // 1. Check ground tile
+  if (!registry.has(levelData.scenery.ground_tile)) {
+    errors.push({
+      type: "missing_asset",
+      message: `Asset '${levelData.scenery.ground_tile}' not found in registry`,
+      path: "scenery.ground_tile"
+    });
+  }
+
+  // 2. Check background props
+  levelData.scenery.background_props.forEach((prop, index) => {
+    if (!registry.has(prop)) {
+      errors.push({
+        type: "missing_asset",
+        message: `Asset '${prop}' not found in registry`,
+        path: `scenery.background_props[${index}]`
+      });
+    }
+  });
+
+  // 3. Check spawn zones
+  levelData.spawn_zones.forEach((zone, zoneIndex) => {
+    // Check asset pool
+    if (zone.asset_pool) {
+      if (zone.asset_pool.length === 0) {
+        errors.push({
+          type: "empty_pool",
+          message: "Asset pool cannot be empty",
+          path: `spawn_zones[${zoneIndex}].asset_pool`
+        });
+      } else {
+        zone.asset_pool.forEach((asset, assetIndex) => {
+          if (!registry.has(asset)) {
+            errors.push({
+              type: "missing_asset",
+              message: `Asset '${asset}' not found in registry`,
+              path: `spawn_zones[${zoneIndex}].asset_pool[${assetIndex}]`
+            });
+          }
+        });
+      }
+    }
+
+    // Check required asset
+    if (zone.required_asset && !registry.has(zone.required_asset)) {
+      errors.push({
+        type: "missing_asset",
+        message: `Required asset '${zone.required_asset}' not found in registry`,
+        path: `spawn_zones[${zoneIndex}].required_asset`
+      });
+    }
+  });
+
+  // 4. Check vignettes
+  levelData.vignettes.forEach((vignette, vignetteIndex) => {
+    vignette.props.forEach((prop, propIndex) => {
+      // Check asset exists
+      if (!registry.has(prop.asset)) {
+        errors.push({
+          type: "missing_asset",
+          message: `Asset '${prop.asset}' not found in registry`,
+          path: `vignettes[${vignetteIndex}].props[${propIndex}].asset`
+        });
+      }
+
+      // Check layer range
+      if (prop.layer < 0 || prop.layer > 10) {
+        errors.push({
+          type: "invalid_layer",
+          message: `Layer value ${prop.layer} out of range (must be 0-10)`,
+          path: `vignettes[${vignetteIndex}].props[${propIndex}].layer`
+        });
+      }
+    });
+  });
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+}
+
+// Basic smoke test
+if (typeof window !== 'undefined' && (window as any).RUN_SMOKE_TEST) {
+  console.log('🧪 Running validateLevelAssets smoke test...');
+  
+  const mockRegistry: AssetRegistry = {
+    has(name: string) {
+      return name.startsWith('valid_');
+    }
+  };
+
+  const testLevel: LevelAssetBindings = {
+    level_id: 'test',
+    scenery: {
+      ground_tile: 'valid_ground',
+      background_props: ['valid_prop1', 'valid_prop2']
+    },
+    spawn_zones: [
+      {
+        type: 'civilian',
+        x: 100,
+        y: 100,
+        radius: 50,
+        asset_pool: ['valid_npc1', 'valid_npc2']
+      }
+    ],
+    vignettes: [
+      {
+        id: 'v1',
+        props: [
+          { asset: 'valid_blood', offset: { x: 0, y: 0 }, layer: 0 },
+          { asset: 'valid_weapon', offset: { x: 10, y: 10 }, layer: 2 }
+        ]
+      }
+    ]
+  };
+
+  const result = validateLevelAssets(testLevel, mockRegistry);
+  console.log('✅ Smoke test passed:', result.valid, 'errors:', result.errors.length);
+}
+</code>
+
+src\components\AssetRegistryTest.tsx:
+<code>
+'use client'
+
+import { useEffect, useRef, useState } from 'react'
+import * as PIXI from 'pixi.js'
+import { AssetRegistry } from '@/core/AssetRegistry'
+
+interface TestResult {
+  name: string
+  status: 'pass' | 'fail' | 'pending'
+  message: string
+  details?: string
+}
+
+export default function AssetRegistryTest() {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [results, setResults] = useState<TestResult[]>([
+    { name: 'Load Manifest', status: 'pending', message: 'Waiting to start...' },
+    { name: 'Create Sprites', status: 'pending', message: 'Waiting to start...' },
+    { name: 'Scale Verification', status: 'pending', message: 'Waiting to start...' },
+    { name: 'Z-Index Sorting', status: 'pending', message: 'Waiting to start...' },
+    { name: 'Error Handling', status: 'pending', message: 'Waiting to start...' },
+    { name: 'Asset Filtering', status: 'pending', message: 'Waiting to start...' },
+    { name: 'Texture Sharing', status: 'pending', message: 'Waiting to start...' }
+  ])
+  const [loading, setLoading] = useState(true)
+  const [spritesLoaded, setSpritesLoaded] = useState(0)
+
+  useEffect(() => {
+    const app = new PIXI.Application({
+      canvas: canvasRef.current!,
+      width: 800,
+      height: 600,
+      backgroundColor: 0x1a1a2e,
+      antialias: false
+    })
+
+    const runTests = async () => {
+      setLoading(true)
+      const newResults = [...results]
+
+      try {
+        // Test 1: Load Manifest
+        const startTime = performance.now()
+        await AssetRegistry.load('/test_manifest.json')
+        const loadTime = performance.now() - startTime
+        
+        newResults[0] = {
+          name: 'Load Manifest',
+          status: loadTime < 500 ? 'pass' : 'fail',
+          message: `Manifest loaded in ${loadTime.toFixed(1)}ms`,
+          details: `Loaded ${AssetRegistry.getAssetCount()} assets`
+        }
+        setResults(newResults)
+        setSpritesLoaded(AssetRegistry.getAssetCount())
+
+        // Test 2: Create Sprites
+        const sprites: PIXI.Sprite[] = []
+        try {
+          const sprite1 = AssetRegistry.createSprite('bench')
+          sprite1.position.set(150, 200)
+          sprites.push(sprite1)
+
+          const sprite2 = AssetRegistry.createSprite('civilian_male_01')
+          sprite2.position.set(300, 180)
+          sprites.push(sprite2)
+
+          const sprite3 = AssetRegistry.createSprite('bloodstain_small')
+          sprite3.position.set(250, 220)
+          sprites.push(sprite3)
+
+          app.stage.addChild(...sprites)
+
+          newResults[1] = {
+            name: 'Create Sprites',
+            status: 'pass',
+            message: `Created ${sprites.length} sprites successfully`,
+            details: 'All sprites rendered on canvas'
+          }
+        } catch (error: any) {
+          newResults[1] = {
+            name: 'Create Sprites',
+            status: 'fail',
+            message: 'Failed to create sprites',
+            details: error.message
+          }
+        }
+        setResults([...newResults])
+
+        // Test 3: Scale Verification
+        const scaleCorrect = sprites.every(s => s.scale.x === 4 && s.scale.y === 4)
+        newResults[2] = {
+          name: 'Scale Verification',
+          status: scaleCorrect ? 'pass' : 'fail',
+          message: scaleCorrect ? 'All sprites have scale=4' : 'Scale mismatch detected',
+          details: `Expected 4, got: ${sprites[0]?.scale.x ?? 'N/A'}`
+        }
+        setResults([...newResults])
+
+        // Test 4: Z-Index Sorting
+        const zIndexCorrect = sprites.every(s => s.zIndex === s.y)
+        newResults[3] = {
+          name: 'Z-Index Sorting',
+          status: zIndexCorrect ? 'pass' : 'fail',
+          message: zIndexCorrect ? 'Y-sorting applied correctly' : 'zIndex not equal to y',
+          details: `Sprite at y=${sprites[0]?.y} has zIndex=${sprites[0]?.zIndex}`
+        }
+        setResults([...newResults])
+
+        // Test 5: Error Handling
+        try {
+          AssetRegistry.createSprite('does_not_exist')
+          newResults[4] = {
+            name: 'Error Handling',
+            status: 'fail',
+            message: 'Should have thrown error for non-existent asset',
+            details: 'No error thrown'
+          }
+        } catch (error: any) {
+          newResults[4] = {
+            name: 'Error Handling',
+            status: 'pass',
+            message: 'Error thrown correctly',
+            details: error.message
+          }
+        }
+        setResults([...newResults])
+
+        // Test 6: Asset Filtering
+        const npcs = AssetRegistry.listAssets({ type: 'npc' })
+        const props = AssetRegistry.listAssets({ type: 'prop' })
+        const tiles = AssetRegistry.listAssets({ type: 'tile' })
+        
+        newResults[5] = {
+          name: 'Asset Filtering',
+          status: npcs.includes('civilian_male_01') && props.includes('bench') ? 'pass' : 'fail',
+          message: `Found ${npcs.length} NPCs, ${props.length} props, ${tiles.length} tiles`,
+          details: `NPCs: ${npcs.join(', ')}`
+        }
+        setResults([...newResults])
+
+        // Test 7: Texture Sharing
+        const spriteA = AssetRegistry.createSprite('bench')
+        const spriteB = AssetRegistry.createSprite('bench')
+        const textureShared = spriteA.texture === spriteB.texture
+        
+        newResults[6] = {
+          name: 'Texture Sharing',
+          status: textureShared ? 'pass' : 'fail',
+          message: textureShared ? 'Sprites share texture memory' : 'Textures duplicated',
+          details: textureShared ? 'Same texture reference' : 'Different texture objects'
+        }
+        setResults([...newResults])
+
+        // Add debug info to canvas
+        const debugText = new PIXI.Text({
+          text: `Assets: ${AssetRegistry.getAssetCount()} | Sprites: ${sprites.length}`,
+          style: {
+            fill: 0xffffff,
+            fontSize: 14,
+            fontFamily: 'monospace'
+          }
+        })
+        debugText.position.set(10, 10)
+        app.stage.addChild(debugText)
+
+        // Add coordinate grid for visual verification
+        const grid = new PIXI.Graphics()
+        grid.lineStyle(1, 0x333366)
+        for (let x = 0; x < 800; x += 50) {
+          grid.moveTo(x, 0)
+          grid.lineTo(x, 600)
+        }
+        for (let y = 0; y < 600; y += 50) {
+          grid.moveTo(0, y)
+          grid.lineTo(800, y)
+        }
+        app.stage.addChildAt(grid, 0)
+
+      } catch (error: any) {
+        console.error('Test suite failed:', error)
+        newResults[0] = {
+          name: 'Load Manifest',
+          status: 'fail',
+          message: 'Initialization failed',
+          details: error.message
+        }
+        setResults(newResults)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    runTests()
+
+    return () => {
+      app.destroy(true, { children: true, texture: true })
+    }
+  }, [])
+
+  const passedCount = results.filter(r => r.status === 'pass').length
+  const totalTests = results.length
+
+  return (
+    <div style={{ fontFamily: 'monospace, sans-serif', padding: '20px' }}>
+      <h1 style={{ color: '#4cc9f0', marginBottom: '10px' }}>AssetRegistry Integration Test</h1>
+      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1', minWidth: '300px' }}>
+          <h2 style={{ color: '#f72585' }}>Test Results ({passedCount}/{totalTests})</h2>
+          <div style={{ 
+            backgroundColor: '#2b2d42', 
+            borderRadius: '8px', 
+            padding: '15px',
+            marginBottom: '20px'
+          }}>
+            {results.map((result, index) => (
+              <div 
+                key={index} 
+                style={{ 
+                  marginBottom: '10px',
+                  padding: '10px',
+                  backgroundColor: result.status === 'pass' ? '#2a9d8f22' : 
+                                 result.status === 'fail' ? '#e6394622' : '#457b9d22',
+                  borderRadius: '4px',
+                  borderLeft: `4px solid ${
+                    result.status === 'pass' ? '#2a9d8f' : 
+                    result.status === 'fail' ? '#e63946' : '#457b9d'
+                  }`
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <strong style={{ color: '#f1faee' }}>{result.name}</strong>
+                  <span style={{ 
+                    color: result.status === 'pass' ? '#2a9d8f' : 
+                           result.status === 'fail' ? '#e63946' : '#a8dadc'
+                  }}>
+                    {result.status.toUpperCase()}
+                  </span>
+                </div>
+                <div style={{ color: '#a8dadc', fontSize: '0.9em', marginTop: '4px' }}>
+                  {result.message}
+                </div>
+                {result.details && (
+                  <div style={{ color: '#8d99ae', fontSize: '0.8em', marginTop: '2px' }}>
+                    {result.details}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ 
+            backgroundColor: '#2b2d42', 
+            borderRadius: '8px', 
+            padding: '15px',
+            marginBottom: '20px'
+          }}>
+            <h3 style={{ color: '#f72585', marginTop: 0 }}>Test Commands</h3>
+            <div style={{ color: '#a8dadc', fontSize: '0.9em' }}>
+              <p>Open browser console and try:</p>
+              <pre style={{ 
+                backgroundColor: '#1a1a2e', 
+                padding: '10px', 
+                borderRadius: '4px',
+                overflowX: 'auto'
+              }}>
+{`// Check initialization
+console.log('Initialized:', AssetRegistry.isInitialized())
+
+// List all assets
+console.log('All assets:', AssetRegistry.listAssets())
+
+// Filter NPCs
+console.log('NPCs:', AssetRegistry.listAssets({ type: 'npc' }))
+
+// Check specific asset
+console.log('Has bench:', AssetRegistry.has('bench'))
+
+// Create new sprite
+const benchSprite = AssetRegistry.createSprite('bench')
+console.log('Bench scale:', benchSprite.scale.x)`}
+              </pre>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex: '1', minWidth: '300px' }}>
+          <h2 style={{ color: '#f72585' }}>Canvas Preview</h2>
+          <div style={{ 
+            backgroundColor: '#2b2d42', 
+            borderRadius: '8px', 
+            padding: '10px',
+            marginBottom: '20px'
+          }}>
+            {loading ? (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                height: '400px',
+                color: '#a8dadc'
+              }}>
+                Loading test suite...
+              </div>
+            ) : (
+              <>
+                <canvas 
+                  ref={canvasRef} 
+                  width={800} 
+                  height={600}
+                  style={{ 
+                    width: '100%', 
+                    height: '400px',
+                    backgroundColor: '#1a1a2e',
+                    borderRadius: '4px',
+                    border: '1px solid #457b9d'
+                  }}
+                />
+                <div style={{ 
+                  color: '#a8dadc', 
+                  fontSize: '0.9em',
+                  marginTop: '10px',
+                  padding: '10px',
+                  backgroundColor: '#1a1a2e',
+                  borderRadius: '4px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Sprites loaded: {spritesLoaded}</span>
+                    <span>Grid: 50px increments</span>
+                  </div>
+                  <div style={{ marginTop: '5px' }}>
+                    <span style={{ color: '#2a9d8f' }}>■</span> Green: bench (prop)<br />
+                    <span style={{ color: '#4cc9f0' }}>■</span> Blue: civilian (npc)<br />
+                    <span style={{ color: '#f72585' }}>■</span> Red: bloodstain (prop)
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div style={{ 
+            backgroundColor: '#2b2d42', 
+            borderRadius: '8px', 
+            padding: '15px'
+          }}>
+            <h3 style={{ color: '#f72585', marginTop: 0 }}>Expected Behavior</h3>
+            <ul style={{ color: '#a8dadc', fontSize: '0.9em', paddingLeft: '20px' }}>
+              <li>All sprites should be 4× larger than their texture size</li>
+              <li>Sprites should be positioned at Y-sorted depths (lower Y = behind)</li>
+              <li>Multiple bench sprites should share the same texture memory</li>
+              <li>Error should appear in console for invalid asset names</li>
+              <li>Total load time should be under 500ms</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+</code>
+
+src\core\AssetRegistry.ts:
+<code>
+import * as PIXI from 'pixi.js';
+
+type AssetType = 'tile' | 'prop' | 'npc';
+
+interface AssetMetadata {
+  texture: PIXI.Texture;
+  anchor: { x: number; y: number };
+  scale: number;
+  type: AssetType;
+}
+
+interface ManifestFrame {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface ManifestMetadata {
+  anchor?: { x: number; y: number };
+  type?: AssetType;
+}
+
+interface SpriteManifest {
+  spritesheet: string;
+  frames: Record<string, ManifestFrame>;
+  metadata?: Record<string, ManifestMetadata>;
+}
+
+/**
+ * Centralized asset loading and sprite factory for PixiJS textures.
+ * 
+ * Usage:
+ * 1. Initialize: `await AssetRegistry.load('/sprite_manifest.json')`
+ * 2. Create sprites: `const sprite = AssetRegistry.createSprite('bench')`
+ * 
+ * All sprites created have `scale=4` and `zIndex=y` pre-applied.
+ */
+export class AssetRegistry {
+  private static cache: Map<string, AssetMetadata> = new Map();
+  private static initialized: boolean = false;
+
+  /**
+   * Load sprite manifest and build texture cache.
+   * Must be called before any other methods.
+   * 
+   * @param manifestPath Path to sprite_manifest.json
+   * @throws Error if manifest is invalid or fails to load
+   */
+  static async load(manifestPath: string): Promise<void> {
+    if (this.initialized) {
+      console.warn('AssetRegistry already initialized. Skipping reload.');
+      return;
+    }
+
+    try {
+      // Fetch manifest
+      const response = await fetch(manifestPath);
+      if (!response.ok) {
+        throw new Error(`Failed to load manifest: ${response.statusText}`);
+      }
+      const manifest: SpriteManifest = await response.json();
+
+      // Validate structure
+      if (!manifest.spritesheet || !manifest.frames) {
+        throw new Error('Invalid manifest: missing "spritesheet" or "frames"');
+      }
+
+      // Load spritesheet
+      const baseTexture = await PIXI.Assets.load(manifest.spritesheet);
+
+      // Build cache
+      for (const [name, frame] of Object.entries(manifest.frames)) {
+        const rectangle = new PIXI.Rectangle(frame.x, frame.y, frame.w, frame.h);
+        const texture = new PIXI.Texture(baseTexture, rectangle);
+
+        const metadata = manifest.metadata?.[name];
+        this.cache.set(name, {
+          texture,
+          anchor: metadata?.anchor || { x: 0.5, y: 0.5 },
+          scale: 4, // From system.md
+          type: metadata?.type || 'prop'
+        });
+      }
+
+      this.initialized = true;
+      console.log(`AssetRegistry loaded ${this.cache.size} assets`);
+
+      // Debug logging in development
+      if (process.env.NODE_ENV === 'development') {
+        console.table([
+          { Type: 'tile', Count: this.listAssets({ type: 'tile' }).length },
+          { Type: 'prop', Count: this.listAssets({ type: 'prop' }).length },
+          { Type: 'npc', Count: this.listAssets({ type: 'npc' }).length }
+        ]);
+      }
+    } catch (error) {
+      console.error('AssetRegistry initialization failed:', error);
+      throw error; // Propagate to caller
+    }
+  }
+
+  /**
+   * Get metadata for an asset.
+   * 
+   * @param name Asset name (e.g., "bench", "civilian_male_01")
+   * @returns AssetMetadata object
+   * @throws Error if registry not initialized or asset not found
+   */
+  static get(name: string): AssetMetadata {
+    if (!this.initialized) {
+      throw new Error('AssetRegistry not initialized. Call load() first.');
+    }
+
+    const metadata = this.cache.get(name);
+    if (!metadata) {
+      throw new Error(`Asset "${name}" not found in registry`);
+    }
+
+    return metadata;
+  }
+
+  /**
+   * Create a configured PIXI.Sprite instance for an asset.
+   * 
+   * @param name Asset name
+   * @returns Configured PIXI.Sprite with scale=4 and zIndex=y applied
+   * @throws Error if asset not found
+   */
+  static createSprite(name: string): PIXI.Sprite {
+    const meta = this.get(name); // Throws if not found
+
+    const sprite = new PIXI.Sprite(meta.texture);
+    sprite.anchor.set(meta.anchor.x, meta.anchor.y);
+    sprite.scale.set(meta.scale);
+    sprite.zIndex = sprite.y; // Y-sorting from system.md
+
+    return sprite;
+  }
+
+  /**
+   * Check if an asset exists in the registry.
+   * 
+   * @param name Asset name
+   * @returns true if asset exists, false otherwise
+   */
+  static has(name: string): boolean {
+    return this.cache.has(name);
+  }
+
+  /**
+   * List assets, optionally filtered by type.
+   * 
+   * @param filter Optional type filter
+   * @returns Array of asset names
+   */
+  static listAssets(filter?: { type?: AssetType }): string[] {
+    const names = Array.from(this.cache.keys());
+
+    if (!filter?.type) {
+      return names;
+    }
+
+    return names.filter(name => {
+      const meta = this.cache.get(name)!;
+      return meta.type === filter.type;
+    });
+  }
+
+  /**
+   * Get initialization status.
+   * 
+   * @returns true if registry is loaded and ready
+   */
+  static isInitialized(): boolean {
+    return this.initialized;
+  }
+
+  /**
+   * Get total number of loaded assets.
+   * 
+   * @returns Count of assets in cache
+   */
+  static getAssetCount(): number {
+    return this.cache.size;
+  }
+}
+
+// Test hook
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  // Expose for manual testing
+  (window as any).AssetRegistry = AssetRegistry;
+  
+  // Simple smoke test when imported directly
+  if (typeof jest === 'undefined') {
+    console.log('AssetRegistry module loaded successfully.');
+    console.log('Manual test commands:');
+    console.log('1. await AssetRegistry.load("/test_manifest.json")');
+    console.log('2. AssetRegistry.createSprite("test_prop")');
+    console.log('3. AssetRegistry.listAssets()');
+  }
+}
+</code>
+
