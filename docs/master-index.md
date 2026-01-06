@@ -88,6 +88,68 @@ class CharacterConfig:
 - `numpy` (Noise algorithms)
 - `jsonschema` (Config validation)
 
+
+#### `CameraController` (NEW)
+**Location:** `src/core/CameraController.ts`  
+**Purpose:** Fixed orthographic camera management for top-down Waldo view.
+```typescript
+class CameraController {
+  // Initialization
+  static initialize(config: CameraConfig): PIXI.Application
+  
+  // World Access
+  static get worldContainer(): PIXI.Container
+  static get app(): PIXI.Application
+  
+  // Coordinate Conversion
+  static screenToWorld(screenX: number, screenY: number): { x: number; y: number }
+  static worldToScreen(worldX: number, worldY: number): { x: number; y: number }
+  
+  // Level Bounds
+  static setBounds(width: number, height: number): void
+  
+  // Optional: Phase 2 Zoom (Dev Flag)
+  static setZoom(level: number): void  // 0.8 - 1.5
+}
+
+interface CameraConfig {
+  type: "fixed-orthographic";
+  bounds: { width: number; height: number };  // From level JSON
+  viewport: { width: 1280; height: 720 };     // From system.md
+  zoom: { initial: 1.0; min: 0.8; max: 1.5 };
+  enableZoom?: boolean;  // Default: false (Phase 2)
+}
+```
+
+**Guarantees:**
+- `worldContainer.sortableChildren = true` pre-configured
+- All sprites added to `worldContainer` auto-sort by `zIndex=y`
+- `screenToWorld()` accounts for camera centering offset
+- Camera never pans (position locked after `initialize()`)
+- Touch events blocked from affecting camera (`touch-action: none`)
+
+**Dependencies:** 
+- PixiJS v8 `PIXI.Application` and `PIXI.Container`
+- Level JSON schema (for bounds)
+
+**Usage Example:**
+```typescript
+// In game initialization
+const app = CameraController.initialize({
+  type: "fixed-orthographic",
+  bounds: { width: 2560, height: 1440 },
+  viewport: { width: 1280, height: 720 },
+  zoom: { initial: 1.0, min: 0.8, max: 1.5 }
+});
+
+// Add sprites
+const sprite = AssetRegistry.createSprite("civilian");
+CameraController.worldContainer.addChild(sprite);
+
+// Handle clicks (in Click Interaction system)
+const worldPos = CameraController.screenToWorld(event.clientX, event.clientY);
+```
+
 ---
 
 
@@ -102,6 +164,7 @@ class CharacterConfig:
 **Purpose:** Centralized asset loading and sprite factory for PixiJS textures.
 
 ```typescript
+
 class AssetRegistry {
   // Initialization
   static async load(manifestPath: string): Promise<void>
@@ -113,6 +176,43 @@ class AssetRegistry {
   
   // Metadata
   static listAssets(filter?: { type?: AssetType }): string[]
+}
+
+class InteractionManager {
+  // Initialization
+  static initialize(config: InteractionConfig): void
+  
+  // Target Registration
+  static registerTarget(target: InteractionTarget): void
+  static unregisterTarget(id: string): void
+  static clearTargets(): void
+  
+  // Query
+  static findTarget(worldX: number, worldY: number): InteractionTarget | null
+  static getTarget(id: string): InteractionTarget | null
+  
+  // Events (Zustand Bridge)
+  static onInteract(callback: (target: InteractionTarget) => void): () => void
+  static onHighlight(callback: (target: InteractionTarget | null) => void): () => void
+}
+
+interface InteractionConfig {
+  minHitboxRadius: number;    // Default: 22px (44px diameter, iOS guideline)
+  highlightColor: number;     // PIXI color for glow effect
+  tapDebounceMs: number;      // Default: 150ms (prevent double-taps)
+  enableVisualFeedback: boolean; // Default: true
+}
+
+interface InteractionTarget {
+  id: string;                           // Unique identifier
+  type: "npc" | "prop" | "evidence";    // Category
+  sprite: PIXI.Sprite;                  // Visual representation
+  hitbox: {
+    x: number;                          // World coordinates
+    y: number;
+    radius: number;                     // Circular hit detection
+  };
+  metadata?: Record<string, unknown>;   // Custom data (NPC name, prop contents)
 }
 
 interface AssetMetadata {
@@ -136,6 +236,90 @@ type AssetType = "tile" | "prop" | "npc"
 - Parse `anchor` field from manifest JSON
 - Apply to `Sprite.anchor` during `createSprite()`
 - Maintain backward compatibility with simple manifests
+
+#### `InteractionManager` (NEW)
+**Location:** `src/core/InteractionManager.ts`  
+**Purpose:** Unified click/touch input system with mobile-first hit detection.
+
+```typescript
+class InteractionManager {
+  // Initialization
+  static initialize(config: InteractionConfig): void
+  
+  // Target Registration
+  static registerTarget(target: InteractionTarget): void
+  static unregisterTarget(id: string): void
+  static clearTargets(): void
+  
+  // Query
+  static findTarget(worldX: number, worldY: number): InteractionTarget | null
+  static getTarget(id: string): InteractionTarget | null
+  
+  // Events (Zustand Bridge)
+  static onInteract(callback: (target: InteractionTarget) => void): () => void
+  static onHighlight(callback: (target: InteractionTarget | null) => void): () => void
+}
+
+interface InteractionConfig {
+  minHitboxRadius: number;    // Default: 22px (44px diameter, iOS guideline)
+  highlightColor: number;     // PIXI color for glow effect
+  tapDebounceMs: number;      // Default: 150ms (prevent double-taps)
+  enableVisualFeedback: boolean; // Default: true
+}
+
+interface InteractionTarget {
+  id: string;                           // Unique identifier
+  type: "npc" | "prop" | "evidence";    // Category
+  sprite: PIXI.Sprite;                  // Visual representation
+  hitbox: {
+    x: number;                          // World coordinates
+    y: number;
+    radius: number;                     // Circular hit detection
+  };
+  metadata?: Record<string, unknown>;   // Custom data (NPC name, prop contents)
+}
+```
+
+**Guarantees:**
+- All pointer events (touch/mouse) unified into single handler
+- Hit detection uses circular collision (fast, mobile-friendly)
+- Closest target selected when multiple overlap (distance-sorted)
+- Debounce prevents accidental double-taps within 150ms
+- Visual feedback (glow filter) applied automatically on tap
+- Event callbacks auto-cleanup on component unmount
+
+**Integration Points:**
+```typescript
+// React Component Usage
+useEffect(() => {
+  const unsubscribe = InteractionManager.onInteract((target) => {
+    if (target.type === "npc") {
+      openDialogue(target.id);
+    }
+  });
+  return unsubscribe;
+}, []);
+
+// PixiJS Sprite Registration (in NPC Spawner)
+const npc = AssetRegistry.createSprite("civilian");
+InteractionManager.registerTarget({
+  id: `npc_${uuid}`,
+  type: "npc",
+  sprite: npc,
+  hitbox: { x: npc.x, y: npc.y, radius: 22 },
+  metadata: { name: "John Doe", role: "civilian" }
+});
+```
+
+**Dependencies:** 
+- `CameraController.screenToWorld()` for coordinate conversion
+- PixiJS Filters API for visual feedback
+- No external libraries required
+
+**Performance:**
+- Spatial hashing for O(1) target lookup with 60+ NPCs
+- Hit-box queries cached per frame (avoid redundant calculations)
+- Event system uses WeakMap for automatic cleanup
 
 
 ---
