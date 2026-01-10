@@ -1,8 +1,13 @@
 ---
-
-#### Updated `system.md`
-
 # System Architecture & Technical Constraints (CTO Approved)
+
+# MASTER SYSTEM CONSTITUTION
+**NOTE:** This is the Master Record.
+For AI Packets, use the split versions:
+- `docs/system_constraints.md` (Planning)
+- `docs/system_style.md` (Coding)
+
+
 
 ## 1. Stack & Environment
 - **Framework:** Next.js 15 (React 19)
@@ -26,3 +31,10 @@
 - **World:** Handled by PixiJS Canvas.
 - **Overlays:** (Dialogue, Menus, Evidence Bag) Handled by React (Absolute positioning).
 - **Communication:** `useStore.subscribe` to bridge React UI with Pixi world events.
+
+
+
+## 1. Stack & Environment
+- **Framework:** Next.js 15 (React 19)
+- **Engine:** PixiJS v8
+- ... (See split files for details)

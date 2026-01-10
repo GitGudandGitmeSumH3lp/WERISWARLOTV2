@@ -99,3 +99,7 @@ class AssetRegistry {
 - [ ] Loading a non-existent asset name throws a descriptive error
 - [ ] All sprites auto-sort by Y-depth without manual `zIndex` assignment
 - [ ] Asset loading completes in <500ms for 50-sprite manifest (performance test)
+
+## REQUIRED CONTEXT (V3.1 Manifest)
+*   `docs/contracts/00_CORE.md` (Defines `AssetRegistry` and `AssetGenerator`)
+*   `docs/system_style.md` (Defines TypeScript/PixiJS rules)

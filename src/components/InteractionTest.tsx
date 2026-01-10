@@ -4,12 +4,22 @@ import * as PIXI from 'pixi.js';
 import { CameraController } from '../core/CameraController';
 import { InteractionManager } from '../core/InteractionManager';
 
+// STRICT TYPING: Define the interface to avoid 'any'
+interface InteractionTarget {
+  id: string;
+  type: "npc" | "prop";
+  sprite: PIXI.Container;
+  hitbox: { x: number; y: number; radius: number };
+  metadata: Record<string, unknown>;
+}
+
 export default function InteractionTest() {
   const [clickedTarget, setClickedTarget] = useState<string | null>(null);
   const [clickCount, setClickCount] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const appRef = useRef<PIXI.Application | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -23,26 +33,27 @@ export default function InteractionTest() {
           throw new Error('Container ref not available');
         }
         
-        // 1. Initialize CameraController FIRST (await the async init)
+        // 1. Initialize CameraController
         console.log('Step 1: Initializing CameraController...');
-        let app: PIXI.Application;
         try {
-          app = await CameraController.initialize({
+          const app = await CameraController.initialize({
             type: "fixed-orthographic",
             bounds: { width: 2560, height: 1440 },
             viewport: { width: 1280, height: 720 },
             zoom: { initial: 1.0, min: 0.8, max: 1.5 }
           });
+          appRef.current = app;
           console.log('✅ CameraController initialized');
         } catch (cameraError) {
-          throw new Error(`CameraController failed: ${cameraError}`);
+          throw new Error(`CameraController failed: ${String(cameraError)}`);
         }
         
-        // 2. Mount canvas to DOM - in PixiJS v8, canvas is app.canvas
+        // 2. Mount canvas to DOM
         console.log('Step 2: Mounting canvas...');
-        const canvas = app.canvas as HTMLCanvasElement;
+        const canvas = appRef.current?.canvas as HTMLCanvasElement;
+        
         if (containerRef.current && canvas) {
-          // Clear container
+          // Clear container to prevent duplicates
           containerRef.current.innerHTML = '';
           containerRef.current.appendChild(canvas);
           console.log('✅ Canvas mounted');
@@ -61,19 +72,19 @@ export default function InteractionTest() {
           });
           console.log('✅ InteractionManager initialized');
         } catch (interactionError) {
-          throw new Error(`InteractionManager failed: ${interactionError}`);
+          throw new Error(`InteractionManager failed: ${String(interactionError)}`);
         }
         
         // 4. Create NPCs with graphics
         console.log('Step 4: Creating NPCs...');
         for (let i = 0; i < 10; i++) {
-          // Create simple NPC with graphics
+          // Create simple NPC container
           const container = new PIXI.Container();
           
           // Body
           const body = new PIXI.Graphics();
           body.beginFill(0x3498db); // Blue shirt
-          body.drawRect(-8, -20, 16, 20);
+          body.drawRect(-8, -20, 16, 20); // Drawn relative to container origin (0,0)
           body.endFill();
           
           // Head
@@ -92,18 +103,22 @@ export default function InteractionTest() {
           container.addChild(head);
           container.addChild(pants);
           
+          // Set World Position
           container.x = Math.random() * 1000 + 100;
           container.y = Math.random() * 600 + 100;
           
           // Add to world
           CameraController.worldContainer.addChild(container);
 
+          // LOGIC FIX: Hitbox must be LOCAL to the container (0,0 offset), not World Position
+          const localHitbox = { x: 0, y: -10, radius: 22 };
+
           // Register for interaction
           InteractionManager.registerTarget({
             id: `test_npc_${i}`,
             type: "npc",
-            sprite: container as any,
-            hitbox: { x: container.x, y: container.y, radius: 22 },
+            sprite: container, // Type is now valid PIXI.Container
+            hitbox: localHitbox, 
             metadata: { name: `NPC ${i}` }
           });
         }
@@ -111,7 +126,7 @@ export default function InteractionTest() {
         
         // 5. Subscribe to interactions
         console.log('Step 5: Setting up interaction subscription...');
-        const unsubscribe = InteractionManager.onInteract((target) => {
+        const unsubscribe = InteractionManager.onInteract((target: InteractionTarget) => {
           console.log('🎯 Click detected:', target.id);
           setClickedTarget(target.id);
           setClickCount(prev => prev + 1);
@@ -127,8 +142,7 @@ export default function InteractionTest() {
           console.log('🧹 Cleaning up...');
           unsubscribe();
           InteractionManager.clearTargets();
-          
-          // Note: Don't destroy app here as CameraController manages it
+          // Note: App destruction is handled by CameraController singleton/context
         };
         
       } catch (err) {

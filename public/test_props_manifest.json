@@ -1,0 +1,9 @@
+
+{
+  "props": {
+    "crime": ["knife", "blood", "gun"],
+    "herring": ["wrench", "hammer", "rope"],
+    "container": ["trash_can", "locker", "backpack"],
+    "ambiance": ["bench", "newspaper", "can"]
+  }
+}
